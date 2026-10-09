@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sprite Sheet Animator</title>
+<style>
+:root{--bg:#f5f5f2;--fg:#1c1c1c;--card:#fff;--line:#d8d8d2;--acc:#5b4bdb;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#14161b;--fg:#e8e8ea;--card:#1d2027;--line:#33374080;--acc:#8f84ff}}
+:root[data-theme="dark"]{--bg:#14161b;--fg:#e8e8ea;--card:#1d2027;--line:#333740;--acc:#8f84ff}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:1100px;margin:0 auto;padding:16px;display:grid;gap:14px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+@media(max-width:800px){main{grid-template-columns:1fr}}
+h1{font-size:18px;margin:0;grid-column:1/-1}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}
+#drop{border:2px dashed var(--line);border-radius:12px;padding:28px 12px;text-align:center;cursor:pointer;grid-column:1/-1}
+#drop.over{border-color:var(--acc)}
+.ctl{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;margin-top:10px}
+.ctl label{white-space:nowrap}
+.ctl input[type=range]{width:100%}
+.stage{display:flex;justify-content:center;align-items:center;border-radius:8px;overflow:auto;padding:8px;min-height:240px}
+.checker{background:conic-gradient(#8884 25%,#fff0 0 50%,#8884 0 75%,#fff0 0) 0 0/20px 20px,#bbb}
+.dark{background:#10131a}.light{background:#f2f2f2}.green{background:#12b34a}
+canvas{max-width:100%;height:auto;display:block}
+#thumbs{display:flex;gap:6px;overflow-x:auto;margin-top:8px}
+#thumbs canvas{height:90px;width:auto;border:1px solid var(--line);border-radius:6px;flex:none}
+.muted{opacity:.7;font-size:12px}
+.btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+button{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px 12px;font:inherit;cursor:pointer}
+button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+input[type=text]{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:3px 6px;width:100%}
+select{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:2px 4px}
+</style></head><body>
+<main>
+<h1>Sprite Sheet Animator</h1>
+<div id="drop"><b>Drop a sprite sheet here</b>, click to browse, or paste an image<br><span class="muted">Background is removed and frames are split automatically</span>
+<input id="file" type="file" accept="image/*" hidden></div>
+
+<section class="card">
+<b>Animation</b>
+<div class="stage checker" id="stage"><canvas id="anim" width="10" height="10"></canvas></div>
+<div class="ctl">
+<label for="fps">Speed</label><input id="fps" type="range" min="1" max="24" value="8"><span id="fpsv">8 fps</span>
+<label for="zoom">Size</label><input id="zoom" type="range" min="20" max="150" value="60"><span id="zoomv">60%</span>
+<label for="pp">Ping-pong</label><input id="pp" type="checkbox"><span></span>
+<label for="bgsel">Backdrop</label><select id="bgsel"><option value="checker">Checker</option><option value="dark">Dark</option><option value="light">Light</option><option value="green">Green</option></select><span></span>
+</div>
+<div id="thumbs"></div>
+</section>
+
+<section class="card">
+<b>Processing</b>
+<div class="stage checker"><canvas id="prev" width="10" height="10"></canvas></div>
+<div class="ctl">
+<label for="n">Frames</label><input id="n" type="number" min="2" max="16" value="4" style="width:60px"><span></span>
+<label for="tol">Bg tolerance</label><input id="tol" type="range" min="5" max="120" value="40"><span id="tolv">40</span>
+<label for="fea">Edge softness</label><input id="fea" type="range" min="1" max="30" value="10"><span id="feav">10</span>
+<label for="anc">Align to</label><select id="anc"><option value="feet">Feet</option><option value="head">Head</option></select><span></span>
+<label for="ero">Edge trim (px)</label><input id="ero" type="range" min="0" max="4" value="1"><span id="erov">1</span>
+<label for="dfr">Defringe edges</label><input id="dfr" type="checkbox" checked><span class="muted">replaces halo colour</span>
+<label for="enc">Remove enclosed bg</label><input id="enc" type="checkbox"><span class="muted">gaps inside the sprite</span>
+<label>Bg colour</label><button id="bgauto" type="button">Auto (corners)</button><span class="muted">or click the preview</span>
+</div>
+<p class="muted" id="info">Waiting for an image…</p>
+</section>
+<section class="card" style="grid-column:1/-1">
+<b>Export for your game</b>
+<div class="ctl">
+<label for="nm">Name</label><input id="nm" type="text" value="walk"><span></span>
+<label for="esc">Export scale</label><select id="esc"><option value="1">100%</option><option value="0.75">75%</option><option value="0.5">50%</option><option value="0.25">25%</option></select><span></span>
+<label for="flip">Face other way</label><input id="flip" type="checkbox"><span class="muted">mirrors preview and exports</span>
+</div>
+<div class="btns">
+<button class="pri" data-k="all">Game pack (.zip)</button>
+<button data-k="sheet">Sprite sheet PNG</button>
+<button data-k="json">Atlas JSON</button>
+<button data-k="gif">Animated GIF</button>
+<button data-k="frames">Frames (.zip)</button>
+</div>
+<p class="muted" id="msg">The game pack bundles the sheet, atlas JSON, GIF and numbered frames. The sheet is one row of equal-size, feet-aligned cells; the JSON has frame size, fps, play order and a pivot point. Exports use the current Frames, Align and Ping-pong settings.</p>
+</section>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let img=null,cells=[],cw=1,ch=1;
+const pc=document.createElement('canvas');
+
+function load(f){if(!f||!f.type.startsWith('image/'))return;const i=new Image();i.onload=()=>{img=i;run()};i.src=URL.createObjectURL(f)}
+const drop=$('drop');
+drop.onclick=()=>$('file').click();
+$('file').onchange=e=>load(e.target.files[0]);
+['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('over')}));
+drop.addEventListener('drop',e=>load(e.dataTransfer.files[0]));
+addEventListener('dragover',e=>e.preventDefault());
+addEventListener('drop',e=>{e.preventDefault();load(e.dataTransfer.files[0])});
+addEventListener('paste',e=>{for(const it of e.clipboardData.items)if(it.type.startsWith('image/'))load(it.getAsFile())});
+
+let timer;const later=()=>{clearTimeout(timer);timer=setTimeout(run,150)};
+['n','tol','fea','anc','ero','dfr','enc'].forEach(id=>$(id).addEventListener('input',()=>{$('tolv').textContent=$('tol').value;$('erov').textContent=$('ero').value;$('feav').textContent=$('fea').value;later()}));
+$('fps').oninput=()=>$('fpsv').textContent=$('fps').value+' fps';
+$('zoom').oninput=sizeIt;
+$('bgsel').onchange=()=>$('stage').className='stage '+$('bgsel').value;
+function sizeIt(){$('zoomv').textContent=$('zoom').value+'%';const a=$('anim');a.style.height=(ch*$('zoom').value/100)+'px';a.style.width='auto'}
+
+function run(){
+ if(!img)return;
+ const w=img.naturalWidth,h=img.naturalHeight,N=+$('n').value,tol=+$('tol').value,fe=+$('fea').value;
+ const c=document.createElement('canvas');c.width=pc.width=w;c.height=pc.height=h;
+ const cx=c.getContext('2d',{willReadFrequently:true});cx.drawImage(img,0,0);srcC=c;
+ const im=cx.getImageData(0,0,w,h),D=im.data,P=w*h;
+ // background colour from the four corners
+ let r=0,g=0,b=0,k=0;
+ for(const [ox,oy] of [[0,0],[w-6,0],[0,h-6],[w-6,h-6]])for(let y=0;y<6;y++)for(let x=0;x<6;x++){const i=((oy+y)*w+ox+x)*4;r+=D[i];g+=D[i+1];b+=D[i+2];k++}
+ r/=k;g/=k;b/=k;if(bgOver)[r,g,b]=bgOver;
+ const d=new Float32Array(P);
+ for(let p=0;p<P;p++){const i=p*4;d[p]=Math.hypot(D[i]-r,D[i+1]-g,D[i+2]-b)}
+ // flood fill from the borders so dark areas inside the character survive
+ const bg=new Uint8Array(P),st=[];
+ const push=p=>{if(!bg[p]&&d[p]<=tol){bg[p]=1;st.push(p)}};
+ for(let x=0;x<w;x++){push(x);push((h-1)*w+x)}
+ for(let y=0;y<h;y++){push(y*w);push(y*w+w-1)}
+ while(st.length){const p=st.pop(),x=p%w;if(x>0)push(p-1);if(x<w-1)push(p+1);if(p>=w)push(p-w);if(p<P-w)push(p+w)}
+ if($('enc').checked)for(let p=0;p<P;p++)if(d[p]<=tol)bg[p]=1;
+ const edge=p=>{const x=p%w;return(x>0&&bg[p-1])||(x<w-1&&bg[p+1])||(p>=w&&bg[p-w])||(p<P-w&&bg[p+w])};
+ for(let t=0;t<+$('ero').value;t++){const m=[];for(let p=0;p<P;p++)if(!bg[p]&&edge(p))m.push(p);m.forEach(p=>bg[p]=1)}
+ const ring=[];for(let p=0;p<P;p++)if(!bg[p]&&edge(p))ring.push(p);
+ const dfr=$('dfr').checked;
+ if(dfr){const rs=new Set(ring);
+  for(const p of ring){const x=p%w,y=(p-x)/w;let sr=0,sg=0,sb=0,c2=0;
+   for(let j=-1;j<=1;j++)for(let i=-1;i<=1;i++){const xx=x+i,yy=y+j;if(xx<0||yy<0||xx>=w||yy>=h)continue;const q=yy*w+xx;if(bg[q]||rs.has(q))continue;sr+=D[q*4];sg+=D[q*4+1];sb+=D[q*4+2];c2++}
+   if(c2){D[p*4]=sr/c2;D[p*4+1]=sg/c2;D[p*4+2]=sb/c2}}}
+ const A=new Uint8Array(P);
+ for(let p=0;p<P;p++)if(!bg[p])A[p]=255;
+ for(const p of ring)A[p]=dfr?200:Math.max(0,Math.min(255,Math.round(255*(d[p]-tol)/fe)));
+ // drop small leftovers (e.g. "FRAME 1" labels)
+ const lab=new Int32Array(P),sz=[0];let L=0;
+ for(let s=0;s<P;s++){
+  if(!A[s]||lab[s])continue;L++;let cnt=0;lab[s]=L;st.push(s);
+  const t=q=>{if(A[q]&&!lab[q]){lab[q]=L;st.push(q)}};
+  while(st.length){const p=st.pop(),x=p%w;cnt++;if(x>0)t(p-1);if(x<w-1)t(p+1);if(p>=w)t(p-w);if(p<P-w)t(p+w)}
+  sz.push(cnt)}
+ const mx=Math.max(...sz);
+ for(let p=0;p<P;p++){if(A[p]&&sz[lab[p]]<mx*0.01)A[p]=0;D[p*4+3]=A[p]}
+ pc.getContext('2d').putImageData(im,0,0);
+ // find frame columns by gaps; fall back to equal slices
+ const col=new Uint32Array(w);for(let p=0;p<P;p++)if(A[p])col[p%w]++;
+ let runs=[],s=-1,gap=0,last=0;
+ for(let x=0;x<=w;x++){
+  if(x<w&&col[x]){if(s<0)s=x;gap=0;last=x}
+  else if(s>=0){gap++;if(gap>=12||x>=w){runs.push([s,last+1]);s=-1}}}
+ let mode='detected from gaps';
+ if(runs.length!==N){mode=`equal slices (found ${runs.length} groups, expected ${N})`;runs=Array.from({length:N},(_,i)=>[Math.floor(i*w/N),Math.floor((i+1)*w/N)])}
+ const fr=[];
+ for(const [x0,x1] of runs){
+  let y0=h,y1=-1,xa=w,xb=-1;
+  for(let y=0;y<h;y++)for(let x=x0;x<x1;x++)if(A[y*w+x]){if(y<y0)y0=y;if(y>y1)y1=y;if(x<xa)xa=x;if(x>xb)xb=x}
+  if(y1<0)continue;
+  const lim=y0+(y1-y0)*0.4;let sx=0,n=0;
+  for(let y=y0;y<=lim;y++)for(let x=xa;x<=xb;x++)if(A[y*w+x]){sx+=x;n++}
+  fr.push({x:xa,y:y0,w:xb-xa+1,h:y1-y0+1,ax:sx/n-xa})}
+ if(!fr.length){$('info').textContent='No sprites found. Try lowering the tolerance.';return}
+ // aligned cells
+ const pad=8,Lm=Math.max(...fr.map(f=>f.ax)),Rm=Math.max(...fr.map(f=>f.w-f.ax)),Hm=Math.max(...fr.map(f=>f.h));
+ cw=Math.ceil(Lm+Rm)+pad*2;ch=Hm+pad*2;pivX=pad+Lm;
+ cells=fr.map(f=>{
+  const e=document.createElement('canvas');e.width=cw;e.height=ch;
+  const dy=$('anc').value==='feet'?ch-pad-f.h:pad;
+  e.getContext('2d').drawImage(pc,f.x,f.y,f.w,f.h,Math.round(pad+Lm-f.ax),dy,f.w,f.h);return e});
+ const a=$('anim');a.width=cw;a.height=ch;sizeIt();
+ const th=$('thumbs');th.innerHTML='';
+ cells.forEach(e=>{const t=document.createElement('canvas');t.width=cw;t.height=ch;t.getContext('2d').drawImage(e,0,0);th.appendChild(t)});
+ const pv=$('prev'),px=pv.getContext('2d');pv.width=w;pv.height=h;
+ px.drawImage(pc,0,0);px.strokeStyle='#ff3b7a';px.lineWidth=Math.max(2,w/600);
+ fr.forEach(f=>px.strokeRect(f.x,f.y,f.w,f.h));
+ $('info').textContent=`${fr.length} frames, ${mode}. Cell size ${cw}×${ch}px. Background colour rgb(${[r,g,b].map(Math.round)}).`;
+}
+
+let pivX=0,srcC=null,bgOver=null;
+$('prev').onclick=e=>{if(!srcC)return;const R=e.target.getBoundingClientRect(),x=Math.min(srcC.width-1,Math.floor((e.clientX-R.left)*srcC.width/R.width)),y=Math.min(srcC.height-1,Math.floor((e.clientY-R.top)*srcC.height/R.height)),q=srcC.getContext('2d').getImageData(x,y,1,1).data;bgOver=[q[0],q[1],q[2]];run()};
+$('bgauto').onclick=()=>{bgOver=null;run()};
+const msg=t=>$('msg').textContent=t;
+const seqOf=n=>{const s=[...Array(n).keys()];if($('pp').checked)for(let i=n-2;i>=1;i--)s.push(i);return s};
+const pngBlob=c=>new Promise(r=>c.toBlob(r,'image/png'));
+const U8=async b=>new Uint8Array(await b.arrayBuffer());
+async function save(name,data){
+ try{let d=null;try{d=await window.claude?.use('downloads')}catch(_){}
+  if(!d){const b=data instanceof Blob?data:new Blob([data]),u=URL.createObjectURL(b),a=document.createElement('a');
+   a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),4000);msg('Downloaded '+name);return}
+  await d.save({filename:name,data});msg('Saved '+name)}
+ catch(e){msg(e.code==='declined'?'Cancelled.':'Export failed: '+(e.message||e.code))}}
+function outFrame(i){
+ const s=+$('esc').value,e=document.createElement('canvas');e.width=Math.round(cw*s);e.height=Math.round(ch*s);
+ const x=e.getContext('2d');x.imageSmoothingQuality='high';
+ if($('flip').checked){x.translate(e.width,0);x.scale(-1,1)}
+ x.drawImage(cells[i],0,0,e.width,e.height);return e}
+function atlas(nm,w,h,n,seq){
+ const s=+$('esc').value,px=$('flip').checked?w-pivX*s:pivX*s,py=$('anc').value==='feet'?h-8*s:8*s;
+ return JSON.stringify({image:nm+'_sheet.png',frameWidth:w,frameHeight:h,frameCount:n,columns:n,rows:1,fps:+$('fps').value,loop:true,sequence:seq,
+  pivot:{x:Math.round(px),y:Math.round(py)},frames:Array.from({length:n},(_,i)=>({index:i,x:i*w,y:0,w,h}))},null,1)}
+// GIF: 255-colour palette from 5-bit colour bins, index 0 = transparent
+function lzw(idx){
+ const clear=256,eoi=257;let size=9,next=258,tbl=new Map(),out=[],cur=0,bits=0;
+ const emit=c=>{cur|=c<<bits;bits+=size;while(bits>=8){out.push(cur&255);cur>>=8;bits-=8}};
+ emit(clear);let pre=idx[0];
+ for(let i=1;i<idx.length;i++){
+  const k=idx[i],key=(pre<<8)|k,v=tbl.get(key);
+  if(v!==undefined){pre=v;continue}
+  emit(pre);
+  if(next===4096){emit(clear);next=258;size=9;tbl.clear()}
+  else{if(next>=(1<<size))size++;tbl.set(key,next++)}
+  pre=k}
+ emit(pre);if(next<4096&&next>=(1<<size))size++;emit(eoi);if(bits>0)out.push(cur&255);return out}
+function makeGif(fs,seq){
+ const w=fs[0].width,h=fs[0].height,N=w*h;
+ const px=fs.map(f=>f.getContext('2d').getImageData(0,0,w,h).data),hist=new Map();
+ px.forEach(d=>{for(let i=0;i<d.length;i+=4)if(d[i+3]>=128){const k=(d[i]>>3)<<10|(d[i+1]>>3)<<5|d[i+2]>>3;let e=hist.get(k);if(!e)hist.set(k,e=[0,0,0,0]);e[0]++;e[1]+=d[i];e[2]+=d[i+1];e[3]+=d[i+2]}});
+ const top=[...hist.values()].sort((a,b)=>b[0]-a[0]).slice(0,255);
+ const pal=[[0,0,0],...top.map(e=>[e[1]/e[0],e[2]/e[0],e[3]/e[0]].map(Math.round))];
+ while(pal.length<256)pal.push([0,0,0]);
+ const cache=new Map(),near=(r,g,b)=>{const k=(r>>3)<<10|(g>>3)<<5|b>>3;let v=cache.get(k);
+  if(v===undefined){let best=1e9;v=1;for(let j=1;j<=top.length;j++){const p=pal[j],q=(p[0]-r)**2+(p[1]-g)**2+(p[2]-b)**2;if(q<best){best=q;v=j}}cache.set(k,v)}return v};
+ const idx=px.map(d=>{const o=new Uint8Array(N);for(let p=0;p<N;p++){const i=p*4;o[p]=d[i+3]<128?0:near(d[i],d[i+1],d[i+2])}return o});
+ const B=[],u16=v=>B.push(v&255,v>>8&255),str=s=>[...s].map(c=>c.charCodeAt(0));
+ B.push(...str('GIF89a'));u16(w);u16(h);B.push(0xF7,0,0);pal.forEach(p=>B.push(...p));
+ B.push(0x21,0xFF,11,...str('NETSCAPE2.0'),3,1,0,0,0);
+ const delay=Math.max(2,Math.round(100/+$('fps').value));
+ const enc=idx.map(lzw);
+ seq.forEach(i=>{B.push(0x21,0xF9,4,9);u16(delay);B.push(0,0,0x2C);u16(0);u16(0);u16(w);u16(h);B.push(0,8);
+  const by=enc[i];for(let p=0;p<by.length;p+=255){const part=by.slice(p,p+255);B.push(part.length,...part)}B.push(0)});
+ B.push(0x3B);return new Uint8Array(B)}
+// ZIP (stored, no compression)
+const crcT=(()=>{const t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+const crc32=u=>{let c=-1;for(let i=0;i<u.length;i++)c=crcT[(c^u[i])&255]^(c>>>8);return(c^-1)>>>0};
+function makeZip(files){
+ const parts=[],cd=[],enc=new TextEncoder();let off=0;
+ for(const f of files){
+  const nm=enc.encode(f.name),c=crc32(f.data),L=new DataView(new ArrayBuffer(30)),C=new DataView(new ArrayBuffer(46));
+  L.setUint32(0,0x04034b50,true);L.setUint16(4,20,true);L.setUint16(6,0x800,true);L.setUint16(12,33,true);
+  L.setUint32(14,c,true);L.setUint32(18,f.data.length,true);L.setUint32(22,f.data.length,true);L.setUint16(26,nm.length,true);
+  C.setUint32(0,0x02014b50,true);C.setUint16(4,20,true);C.setUint16(6,20,true);C.setUint16(8,0x800,true);C.setUint16(14,33,true);
+  C.setUint32(16,c,true);C.setUint32(20,f.data.length,true);C.setUint32(24,f.data.length,true);C.setUint16(28,nm.length,true);C.setUint32(42,off,true);
+  parts.push(L,nm,f.data);cd.push(C,nm);off+=30+nm.length+f.data.length}
+ const cdSize=cd.reduce((a,p)=>a+(p.byteLength),0),E=new DataView(new ArrayBuffer(22));
+ E.setUint32(0,0x06054b50,true);E.setUint16(8,files.length,true);E.setUint16(10,files.length,true);E.setUint32(12,cdSize,true);E.setUint32(16,off,true);
+ return new Blob([...parts,...cd,E],{type:'application/zip'})}
+async function exportIt(kind){
+ if(!cells.length){msg('Load a sprite sheet first.');return}
+ msg('Building…');await new Promise(r=>setTimeout(r,20));
+ const nm=($('nm').value.trim()||'walk').replace(/[^\w-]+/g,'_'),n=cells.length,fs=cells.map((_,i)=>outFrame(i)),w=fs[0].width,h=fs[0].height;
+ const sc=document.createElement('canvas');sc.width=w*n;sc.height=h;fs.forEach((f,i)=>sc.getContext('2d').drawImage(f,i*w,0));
+ const seq=seqOf(n),sheet=await pngBlob(sc),js=atlas(nm,w,h,n,seq);
+ if(kind==='sheet')return save(nm+'_sheet.png',sheet);
+ if(kind==='json')return save(nm+'_sheet.json',js);
+ if(kind==='gif')return save(nm+'.gif',new Blob([makeGif(fs,seq)],{type:'image/gif'}));
+ const files=[];
+ for(let i=0;i<n;i++)files.push({name:`frames/${nm}_${String(i+1).padStart(2,'0')}.png`,data:await U8(await pngBlob(fs[i]))});
+ if(kind==='all')files.push({name:nm+'_sheet.png',data:await U8(sheet)},{name:nm+'_sheet.json',data:new TextEncoder().encode(js)},{name:nm+'.gif',data:makeGif(fs,seq)});
+ return save(nm+(kind==='all'?'_pack.zip':'_frames.zip'),makeZip(files))}
+document.querySelectorAll('[data-k]').forEach(b=>b.onclick=()=>exportIt(b.dataset.k));
+
+const t0=performance.now();
+function tick(now){
+ if(cells.length){
+  const seq=seqOf(cells.length);
+  const i=seq[Math.floor((now-t0)/1000*$('fps').value)%seq.length];
+  const a=$('anim'),x=a.getContext('2d');x.setTransform(1,0,0,1,0,0);x.clearRect(0,0,a.width,a.height);
+  if($('flip').checked){x.translate(a.width,0);x.scale(-1,1)}
+  x.drawImage(cells[i],0,0);
+ }
+ requestAnimationFrame(tick)}
+requestAnimationFrame(tick);
+</script></body></html>
